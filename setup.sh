@@ -6,5 +6,6 @@ source .venv/bin/activate
 
 printf "Installing from requirements.\n"
 pip install -r ./requirements.txt
+chmod +x main.py
 
 printf "Setup complete\n"

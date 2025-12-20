@@ -11,6 +11,7 @@ Install via:
 ```sh
 git clone https://github.com/RimuEirnarn/renvia
 cd renvia
+chmod +x setup.sh
 ./setup.sh
 ```
 
