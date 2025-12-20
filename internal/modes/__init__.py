@@ -65,6 +65,8 @@ def move_relmice(editor: EditorState):
 
     if STATE['use_naive_mice'] and bstate in (MICE_SCROLL_UP, MICE_SCROLL_DOWN):
         return go_up(editor) if bstate == MICE_SCROLL_UP else go_down(editor)
+    if bstate in (MICE_SCROLL_UP, MICE_SCROLL_DOWN): # Scroll up = B4
+        return ReturnType.CONTINUE
 
     vrow = editor.window.start + row
     if vrow >= editor.buffer.size or editor.window.end <= 0:

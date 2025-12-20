@@ -40,7 +40,8 @@ Normal Mode:
 [h] -> Help
 [g] -> Jump to start line
 [G] -> Jump to last line
-[l]/[L] -> Enable/Disable mouse capturing
+[l] -> Toggle mouse capturing
+[;] -> Toggle mouse custom signals (may overlap with some keys)
 
 Edit Mode:
 [ESC] -> Return to Normal
