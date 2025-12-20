@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """RenVIA"""
 from curses import window
 import curses
