@@ -1,0 +1,230 @@
+"""RenVIA"""
+from curses import window
+import curses
+from internal.history import HistoryTree
+from internal.buffer import Buffer
+from internal.cursor import Cursor
+from internal.modes import Modes
+from internal.utils import set_cursor
+from internal import Basic
+
+from internal.editor import EditorState
+from internal.modes.normal import NormalMode
+from internal.modes.helpmode import HelpMode
+from lymia import Panel, ReturnInfo, Scene, run, ReturnType, status
+from lymia.data import SceneResult, _StatusInfo as StatusInfo
+from lymia.environment import Theme
+from lymia.utils import prepare_windowed
+
+
+theme = Theme(2, Basic())
+
+BUFFER_EXAMPLE = """\
+Hello, World!
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+12387912873981293789
+asidfuuioahDIUHIDUHO92837492378492739478923870498710892089340892314098127309847290138749081273094870192387409821730948712903874901287349812730894792807908347902709874098124098172309847192807
+
+uioiUW DH Q
+
+     9823YFY87SYDH87F
+     IFSDUHFIUHASD
+    DIUFH
+ASUKDFHIU ASF
+
+FAS
+FAS
+DF
+SADF
+ G
+ T
+ GHYW35Y3Q24T
+
+
+ 4E3R
+ FQ234RT
+ Y5
+ ER
+ GA
+ E
+ F
+SDFSDF
+
+SADF
+ASD
+F
+WSYG
+E
+R5YH
+TJN
+S
+"""
+
+HELP_TEXT = """\
+Normal Mode:
+[q] -> quit
+[i] -> Edit mode
+[a] -> Edit mode
+[Up/Left/Right/Down] -> Navigation
+[x] -> Remove current character
+[0] -> Jump to 0th character in this line
+[$] -> Jump to last character in this line
+[u] -> Undo
+[U] -> Redo
+[w] -> Write to disk
+[h] -> Help
+
+Edit Mode:
+[ESC] -> Return to Normal
+"""
+# BUFFER_EXAMPLE = ""
+
+def render_line(data: str, maxsize: int, shift: int = 0):
+    """Render line"""
+    shift = max(shift, 0)
+    ln = len(data)
+    # If shift is beyond the end, return an all-space string quickly.
+    if shift >= ln:
+        return " " * maxsize
+
+    end = shift + maxsize
+    chunk = data[shift:end]
+    clen = len(chunk)
+    if clen == maxsize:
+        return chunk
+    return chunk + (" " * (maxsize - clen))
+
+class Root(Scene):
+    """RenVIA"""
+    use_default_color = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._buffer = Buffer("example.txt") # type: ignore
+        self._cursor = Cursor(0,0, 0)
+        self._status = StatusInfo()
+        self._status.set("")
+        self._editor = EditorState(self._cursor, self._buffer, HistoryTree(), self._status)
+        self._mode = NormalMode()
+        self._reserved_lines = 2
+        self._debug = ""
+        self._ctype = 2
+        self._lastkey = 0
+        self._escd = curses.get_escdelay()
+        self._override = True
+
+    def _draw_help(self, ren: window, _):
+        _, width = ren.getmaxyx()
+        ren.box()
+        for index, line in enumerate(HELP_TEXT.splitlines(), 1):
+            ren.addnstr(index, 1, line, width-1)
+
+    def init_help(self):
+        """Draw help mode"""
+        width, height = self.term_size
+        res = self._reserved_lines
+
+        self._panels = (Panel(height - res - 4, width - 6, 1, 3, callback=self._draw_help),)
+
+    def draw_editor(self):
+        """Draw the editor"""
+        ren = self._screen
+        width, height = self.term_size
+        res = self._reserved_lines
+        bmaxh = self._buffer.size
+        crow = self._cursor.row
+        if bmaxh != 0:
+            shift = self._cursor.col - width if self._cursor.col > width else 0
+            minh, maxh = prepare_windowed(self._cursor.row, height - res)
+            if self._cursor.col > self._buffer.sizeof_line(self._cursor.row):
+                self._cursor.col = max(self._buffer.sizeof_line(self._cursor.row) - 1, 0)
+
+            if maxh > bmaxh:
+                minh = max(minh - (maxh - bmaxh), 0)
+                maxh = bmaxh
+            crow = self._cursor.row - minh
+            for index, relindex in enumerate(range(minh, maxh)):
+                style = 0
+                if index < (height - self._reserved_lines):
+                    try:
+                        ren.addnstr(index, 0, render_line(self._buffer[relindex], width - 1, shift), width, style)
+                    except IndexError:
+                        self._debug = f"[{relindex} -> {bmaxh}]"
+
+        if (height - res) > bmaxh:
+            if bmaxh == 0:
+                bmaxh = 1
+            for i in range((bmaxh), (height - res)):
+                ren.addstr(max(i, 1), 0, "~", Basic.UNCOVERED.pair())
+        ren.move(min(crow, height - res - 1), min(self._cursor.col, width - 1))
+
+    def draw(self) -> None | ReturnType:
+        width, height = self.term_size
+        ren = self._screen
+
+        fname = self._buffer.filename + ("*" if self._buffer.dirty else "")
+        fst = f" | {self._status.get()}" if self._status.get() != "" else ""
+        filestatus = fname + fst
+        ren.addnstr(height - 2, 0, f"{filestatus:{width}}", width, self._mode.theme.pair())
+        status.set(f"Row: {self._cursor.row} | Col: {self._cursor.col} | Buffer: {self._buffer.size} | Cursor: {self._mode.curs_style}/{self._mode.term_vis} | Key: {self._lastkey} | Details: {self._debug}")
+        self.show_status()
+        self.update_panels()
+        self.draw_editor()
+
+    def _check_bufferline(self, nextline: int):
+        ccol = self._cursor.col
+        sizeof = self._buffer.sizeof_line(nextline)
+        self._debug = f"{ccol} [{sizeof - 1}]"
+        if ccol > sizeof:
+            self._cursor.col = sizeof
+
+    def init(self, stdscr: window):
+        super().init(stdscr)
+        curses.set_escdelay(1)
+        self._mode.on_enter(self._editor)
+
+    def on_unmount(self):
+        super().on_unmount()
+        set_cursor(0)
+
+    def keymap_override(self, key: int) -> ReturnType:
+        ret: ReturnType | ReturnInfo[Modes] = self._mode.handle_key(key, self._editor)
+        if isinstance(ret, ReturnType):
+            return ret
+        if ret.type != ReturnType.OVERRIDE:
+            self._debug = "Unknown receiver!"
+            return ReturnType.ERR
+        if not isinstance(ret.additional_info, Modes):
+            raise TypeError("Context switching failed,"
+                            f" expected Modes-subclasses, got {type(ret.additional_info)}")
+        if isinstance(self._mode, HelpMode): # on exit
+            self._panels = ()
+        self._mode.on_exit(self._editor)
+        self._mode = ret.additional_info
+
+        if isinstance(self._mode, HelpMode): # on enter
+            self.init_help()
+        return self._mode.on_enter(self._editor)
+
+    def handle_key(self, key: int) -> ReturnType | SceneResult:
+        self._lastkey = key
+        self._status.set("")
+        return super().handle_key(key)
+
+
+
+def init():
+    """init"""
+    return Root(), theme
+
+if __name__ == '__main__':
+    run(init)
