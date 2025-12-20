@@ -1,7 +1,10 @@
 """Buffer"""
 
-import os.path
+from os import stat
 
+from lymia import ReturnInfo, ReturnType
+
+BUFFER_MAX_SIZE = (1024 ** 2) * 1
 
 class Buffer:
     """Buffer zone"""
@@ -10,9 +13,7 @@ class Buffer:
         self._filename: str = filename
         self._buffer: list[str] = buffer or []
         self._dirty: bool = False
-        if os.path.exists(filename):
-            with open(filename, encoding='utf-8') as file:
-                self._buffer = file.read().splitlines()
+        self.read()
 
     def __getitem__(self, index: int):
         return self._buffer[index]
@@ -55,14 +56,33 @@ class Buffer:
         self._dirty = True
         self._buffer.pop(pos)
 
+    def read(self, encoding='utf-8'):
+        """Read file"""
+        try:
+            st = stat(self._filename)
+            if st.st_size >= BUFFER_MAX_SIZE:
+                return ReturnInfo(ReturnType.ERR, "File is bigger than 1MB", "")
+            with open(self._filename, encoding=encoding) as file:
+                self._buffer = file.read().splitlines()
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            return ReturnInfo(ReturnType.ERR, str(exc), type(exc).__name__)
+        return ReturnType.OK
+
     def write(self, encoding='utf-8'):
         """Write to disk"""
         if not self._dirty:
-            return
+            return ReturnType.CONTINUE
 
-        with open(self._filename, 'w', encoding=encoding) as file:
-            file.write("\n".join(self._buffer))
+        if not self._filename:
+            return ReturnInfo(ReturnType.ERR, "Filename is empty", "")
+
+        try:
+            with open(self._filename, 'w', encoding=encoding) as file:
+                file.write("\n".join(self._buffer))
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            return ReturnInfo(ReturnType.ERR, str(exc), type(exc).__name__)
         self._dirty = False
+        return ReturnType.OK
 
     def split_line(self, pos: int):
         """Split lines from a position"""

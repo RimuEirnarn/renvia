@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """RenVIA"""
+from os import stat
+from sys import argv
 from curses import window
 import curses
+import sys
 from internal.history import HistoryTree
 from internal.buffer import Buffer
 from internal.cursor import Cursor
@@ -20,55 +23,7 @@ from lymia.utils import prepare_windowed
 
 theme = Theme(2, Basic())
 
-BUFFER_EXAMPLE = """\
-Hello, World!
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-12387912873981293789
-asidfuuioahDIUHIDUHO92837492378492739478923870498710892089340892314098127309847290138749081273094870192387409821730948712903874901287349812730894792807908347902709874098124098172309847192807
-
-uioiUW DH Q
-
-     9823YFY87SYDH87F
-     IFSDUHFIUHASD
-    DIUFH
-ASUKDFHIU ASF
-
-FAS
-FAS
-DF
-SADF
- G
- T
- GHYW35Y3Q24T
-
-
- 4E3R
- FQ234RT
- Y5
- ER
- GA
- E
- F
-SDFSDF
-
-SADF
-ASD
-F
-WSYG
-E
-R5YH
-TJN
-S
-"""
+MAX_SIZE = 1024 * 1024 * 1 # 1 MiB
 
 HELP_TEXT = """\
 Normal Mode:
@@ -108,9 +63,9 @@ class Root(Scene):
     """RenVIA"""
     use_default_color = True
 
-    def __init__(self) -> None:
+    def __init__(self, filename: str) -> None:
         super().__init__()
-        self._buffer = Buffer("example.txt") # type: ignore
+        self._buffer = Buffer(filename) # type: ignore
         self._cursor = Cursor(0,0, 0)
         self._status = StatusInfo()
         self._status.set("")
@@ -222,10 +177,17 @@ class Root(Scene):
         return super().handle_key(key)
 
 
-
 def init():
     """init"""
-    return Root(), theme
+    filename = "untitled.txt" if len(argv) == 1 else argv[1]
+    try:
+        st = stat(filename)
+        if st.st_size > MAX_SIZE:
+            print(f"File {filename} must not be bigger than 1MB")
+            sys.exit(1)
+    except FileNotFoundError:
+        pass
+    return Root(filename), theme
 
 if __name__ == '__main__':
     run(init)
