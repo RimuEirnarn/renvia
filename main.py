@@ -10,9 +10,9 @@ from internal.buffer import Buffer
 from internal.cursor import Cursor
 from internal.modes import Modes
 from internal.utils import set_cursor
-from internal import Basic
+from internal import Basic, use_mice
 
-from internal.editor import EditorState
+from internal.editor import EditorState, EditorView
 from internal.modes.normal import NormalMode
 from internal.modes.helpmode import HelpMode
 from lymia import Panel, ReturnInfo, Scene, run, ReturnType, status
@@ -40,6 +40,7 @@ Normal Mode:
 [h] -> Help
 [g] -> Jump to start line
 [G] -> Jump to last line
+[l]/[L] -> Enable/Disable mouse capturing
 
 Edit Mode:
 [ESC] -> Return to Normal
@@ -64,6 +65,7 @@ def render_line(data: str, maxsize: int, shift: int = 0):
 class Root(Scene):
     """RenVIA"""
     use_default_color = True
+    use_mouse = False
 
     def __init__(self, filename: str) -> None:
         super().__init__()
@@ -71,7 +73,7 @@ class Root(Scene):
         self._cursor = Cursor(0,0, 0)
         self._status = StatusInfo()
         self._status.set("")
-        self._editor = EditorState(self._cursor, self._buffer, HistoryTree(), self._status)
+        self._editor = EditorState(self._cursor, self._buffer, HistoryTree(), self._status, EditorView(0, 0, 0, 0))
         self._mode = NormalMode()
         self._reserved_lines = 2
         self._debug = ""
@@ -97,6 +99,8 @@ class Root(Scene):
         """Draw the editor"""
         ren = self._screen
         width, height = self.term_size
+        self._editor.window.term_width = width
+        self._editor.window.term_height = height
         res = self._reserved_lines
         bmaxh = self._buffer.size
         crow = self._cursor.row
@@ -109,6 +113,8 @@ class Root(Scene):
             if maxh > bmaxh:
                 minh = max(minh - (maxh - bmaxh), 0)
                 maxh = bmaxh
+            self._editor.window.start = minh
+            self._editor.window.end = maxh
             crow = self._cursor.row - minh
             for index, relindex in enumerate(range(minh, maxh)):
                 style = 0
@@ -123,7 +129,12 @@ class Root(Scene):
                 bmaxh = 1
             for i in range((bmaxh), (height - res)):
                 ren.addstr(max(i, 1), 0, "~", Basic.UNCOVERED.pair())
-        ren.move(min(crow, height - res - 1), min(self._cursor.col, width - 1))
+        try:
+            row = min(crow, height - res - 1)
+            col = max(min(self._cursor.col, width - 1), 0)
+            ren.move(min(row, height - res - 1), col)
+        except curses.error:
+            self._debug = f"Row={row} [{height - res - 1}], Col={col} [{width - 1}]"
 
     def draw(self) -> None | ReturnType:
         width, height = self.term_size
@@ -148,6 +159,8 @@ class Root(Scene):
     def init(self, stdscr: window):
         super().init(stdscr)
         curses.set_escdelay(1)
+        if self.use_mouse:
+            use_mice()
         self._mode.on_enter(self._editor)
 
     def on_unmount(self):

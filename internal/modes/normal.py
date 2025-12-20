@@ -3,7 +3,7 @@ import curses
 from lymia import ReturnInfo, ReturnType
 from lymia import const
 from internal.editor import EditorState
-from internal import Basic
+from internal import Basic, use_mice, disable_mice as mice_disable
 from internal.utils import set_cursor
 import internal.modes.edit
 import internal.modes.helpmode
@@ -63,6 +63,16 @@ def write_to_disk(editor: EditorState):
     editor.status.set("Saved")
     return ReturnType.OK
 
+def enable_mice(_: EditorState):
+    """Enable mice"""
+    use_mice()
+    return ReturnType.OK
+
+def disable_mice(_: EditorState):
+    """Disable mice"""
+    mice_disable()
+    return ReturnType.OK
+
 class NormalMode(Modes):
     """Modes"""
     curs_style = 1
@@ -82,7 +92,9 @@ class NormalMode(Modes):
         'w': write_to_disk,
         'h': to_help,
         'g': lambda editor: rjump_to(editor, 0),
-        'G': lambda editor: rjump_to(editor, -1)
+        'G': lambda editor: rjump_to(editor, -1),
+        'l': enable_mice,
+        'L': disable_mice
     }
 
     def on_enter(self, _: EditorState):

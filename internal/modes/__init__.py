@@ -4,11 +4,15 @@
 import curses
 from typing import Any, Callable
 
-from internal import Basic
+from internal import STATE, Basic
 from internal.editor import EditorState
 from lymia import ReturnInfo, const
 from lymia.colors import ColorPair
 from lymia.data import ReturnType
+
+MICE_HOVER = 268435456
+MICE_SCROLL_UP = 65536
+MICE_SCROLL_DOWN = 2097152
 
 def _check_bufferline(editor: EditorState, nextline: int):
     ccol = editor.cursor.col
@@ -48,6 +52,28 @@ def go_right(editor: EditorState):
         return ReturnType.CONTINUE
     editor.cursor.col += 1
     return ReturnType.CONTINUE
+
+def move_relmice(editor: EditorState):
+    """Move relative to mice (mouse)"""
+    dev_id, col, row, _, bstate = curses.getmouse()
+    keybind = MICE_BIND.get(bstate, "UNKNOWN")
+    editor.status.set(f"Mouse#{dev_id} ({row}, {col}) [{bstate} -> {keybind}]")
+    if bstate not in (curses.BUTTON1_RELEASED, curses.BUTTON1_CLICKED, MICE_SCROLL_UP, MICE_SCROLL_DOWN):
+        return ReturnType.CONTINUE
+    if row >= (editor.window.term_height - 2):
+        return ReturnType.CONTINUE
+
+    if STATE['use_naive_mice'] and bstate in (MICE_SCROLL_UP, MICE_SCROLL_DOWN):
+        return go_up(editor) if bstate == MICE_SCROLL_UP else go_down(editor)
+
+    vrow = editor.window.start + row
+    if vrow >= editor.buffer.size or editor.window.end <= 0:
+        return ReturnType.CONTINUE
+    sizeof = editor.buffer.sizeof_line(vrow)
+    if col >= sizeof:
+        col = sizeof - 1
+    editor.cursor.move_to(vrow, col)
+    return ReturnType.OK
 
 def key_modifier(key: str, editor: EditorState):
     """Key modifier"""
@@ -123,11 +149,41 @@ def remove_current_char(editor: EditorState):
     editor.cursor.col -= 1
     return ReturnType.OK
 
+MICE_BIND = {
+    curses.BUTTON1_CLICKED: "#1/CLICK",
+    curses.BUTTON1_DOUBLE_CLICKED: "#1/DCLICK",
+    curses.BUTTON1_PRESSED: "#1/PRESSED",
+    curses.BUTTON1_RELEASED: "#1/RELEASED",
+    curses.BUTTON1_TRIPLE_CLICKED: "#1/TCLICK",
+
+    curses.BUTTON2_CLICKED: "#2/CLICK",
+    curses.BUTTON2_DOUBLE_CLICKED: "#2/DCLICK",
+    curses.BUTTON2_PRESSED: "#2/PRESSED",
+    curses.BUTTON2_RELEASED: "#2/RELEASED",
+    curses.BUTTON2_TRIPLE_CLICKED: "#2/TCLICK",
+
+    curses.BUTTON3_CLICKED: "#3/CLICK",
+    curses.BUTTON3_DOUBLE_CLICKED: "#3/DCLICK",
+    curses.BUTTON3_PRESSED: "#3/PRESSED",
+    curses.BUTTON3_RELEASED: "#3/RELEASED",
+    curses.BUTTON3_TRIPLE_CLICKED: "#3/TCLICK",
+
+    curses.BUTTON4_CLICKED: "#4/CLICK",
+    curses.BUTTON4_DOUBLE_CLICKED: "#4/DCLICK",
+    curses.BUTTON4_PRESSED: "#4/PRESSED",
+    curses.BUTTON4_RELEASED: "#4/RELEASED",
+    curses.BUTTON4_TRIPLE_CLICKED: "#4/TCLICK",
+
+    MICE_SCROLL_DOWN: "SCROLL",
+    MICE_HOVER: "HOVER"
+}
+
 CURSOR_KEYMAP = {
     curses.KEY_LEFT: go_left,
     curses.KEY_RIGHT: go_right,
     curses.KEY_UP: go_up,
     curses.KEY_DOWN: go_down,
+    curses.KEY_MOUSE: move_relmice,
     const.KEY_ESC: lambda _: ReturnType.REVERT_OVERRIDE
 }
 
