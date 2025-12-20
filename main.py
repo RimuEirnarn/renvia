@@ -10,7 +10,7 @@ from internal.buffer import Buffer
 from internal.cursor import Cursor
 from internal.modes import Modes
 from internal.utils import set_cursor
-from internal import Basic, use_mice
+from internal import STATE, Basic, use_mice
 
 from internal.editor import EditorState, EditorView
 from internal.modes.normal import NormalMode
@@ -40,8 +40,8 @@ Normal Mode:
 [h] -> Help
 [g] -> Jump to start line
 [G] -> Jump to last line
-[l] -> Toggle mouse capturing
-[;] -> Toggle mouse custom signals (may overlap with some keys)
+[l] -> Toggle mouse capturing (current={mice})
+[;] -> Toggle mouse custom signals (may overlap with some keys) (current={naive})
 
 Edit Mode:
 [ESC] -> Return to Normal
@@ -87,7 +87,7 @@ class Root(Scene):
         _, width = ren.getmaxyx()
         ren.box()
         for index, line in enumerate(HELP_TEXT.splitlines(), 1):
-            ren.addnstr(index, 1, line, width-1)
+            ren.addnstr(index, 1, line.format(mice=STATE['use_mice'], naive=STATE['use_naive_mice']), width-1)
 
     def init_help(self):
         """Draw help mode"""
