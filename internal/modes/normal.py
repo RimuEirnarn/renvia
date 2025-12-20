@@ -24,10 +24,10 @@ def go_right(editor: EditorState):
     if editor.cursor.col >= (editor.buffer.sizeof_line(editor.cursor.row) - 1):
         return ReturnType.CONTINUE
     editor.cursor.col += 1
-    return ReturnType.CONTINUE
+    return ReturnType.OK
 
-def jump_to(editor: EditorState, col: int):
-    """Jump to"""
+def cjump_to(editor: EditorState, col: int):
+    """Jump to (col)"""
     if editor.buffer.size == 0:
         return ReturnType.CONTINUE
     if col >= editor.buffer.sizeof_line(editor.cursor.row) or col == -1:
@@ -36,7 +36,18 @@ def jump_to(editor: EditorState, col: int):
 
     col = max(0, col)
     editor.cursor.col = col
-    return ReturnType.CONTINUE
+    return ReturnType.OK
+
+def rjump_to(editor: EditorState, row: int):
+    """Jump to (row)"""
+    if editor.buffer.size == 0:
+        return ReturnType.CONTINUE
+    if row >= editor.buffer.size or row == -1:
+        row = editor.buffer.size - 1
+
+    row = max(0, row)
+    editor.cursor.row = row
+    return ReturnType.OK
 
 def undo(editor: EditorState):
     """Undo"""
@@ -64,12 +75,14 @@ class NormalMode(Modes):
         'a': to_insert,
         'q': lambda _: ReturnType.EXIT,
         'x': remove_current_char,
-        '0': lambda editor: jump_to(editor, 0),
-        '$': lambda editor: jump_to(editor, -1),
+        '0': lambda editor: cjump_to(editor, 0),
+        '$': lambda editor: cjump_to(editor, -1),
         'u': undo,
         "U": redo,
         'w': write_to_disk,
-        'h': to_help
+        'h': to_help,
+        'g': lambda editor: rjump_to(editor, 0),
+        'G': lambda editor: rjump_to(editor, -1)
     }
 
     def on_enter(self, _: EditorState):

@@ -38,6 +38,8 @@ Normal Mode:
 [U] -> Redo
 [w] -> Write to disk
 [h] -> Help
+[g] -> Jump to start line
+[G] -> Jump to last line
 
 Edit Mode:
 [ESC] -> Return to Normal
