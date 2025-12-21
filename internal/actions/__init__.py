@@ -2,7 +2,7 @@
 # pylint: disable=unused-argument
 
 from lymia import ReturnInfo, ReturnType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from internal.editor import EditorState
@@ -18,3 +18,6 @@ class Action:
     def undo(self, editor: "EditorState") -> ReturnType | ReturnInfo:
         """Undo this action"""
         return NotImplemented
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__}>"

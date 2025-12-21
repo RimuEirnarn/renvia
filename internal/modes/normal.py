@@ -7,7 +7,7 @@ from internal import STATE, Basic, use_mice, disable_mice as mice_disable
 from internal.utils import set_cursor
 import internal.modes.edit
 import internal.modes.helpmode
-from . import Modes, CURSOR_KEYMAP, remove_current_char
+from . import Modes, CURSOR_KEYMAP, TRIGGER_EVENT, rmc
 
 def to_insert(_):
     """To insert mode"""
@@ -76,6 +76,17 @@ def toggle_mice_naivety(_: EditorState):
     STATE['use_naive_mice'] = not STATE['use_naive_mice']
     return ReturnType.OK
 
+def tdebug(editor: EditorState):
+    """Toggle debug"""
+    editor.debug.show = False
+    if not editor.debug.panel:
+        return ReturnType.CONTINUE
+    if editor.debug.panel.visible:
+        editor.debug.panel.hide()
+    else:
+        editor.debug.panel.show()
+    return ReturnType.OK
+
 class NormalMode(Modes):
     """Modes"""
     curs_style = 1
@@ -87,7 +98,7 @@ class NormalMode(Modes):
         'i': to_insert,
         'a': to_insert,
         'q': lambda _: ReturnType.EXIT,
-        'x': remove_current_char,
+        'x': rmc,
         '0': lambda editor: cjump_to(editor, 0),
         '$': lambda editor: cjump_to(editor, -1),
         'u': undo,
@@ -97,8 +108,20 @@ class NormalMode(Modes):
         'g': lambda editor: rjump_to(editor, 0),
         'G': lambda editor: rjump_to(editor, -1),
         'l': mouse_toggle,
-        ';': toggle_mice_naivety
+        ';': toggle_mice_naivety,
+        '`': tdebug
     }
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._buffer = []
+        self._during_undo: bool = False
+
+    def handle_key(self, key: int, editor: EditorState) -> ReturnType | ReturnInfo:
+        if key in TRIGGER_EVENT and self._during_undo:
+            self._during_undo = False
+
+        return super().handle_key(key, editor)
 
     def on_enter(self, _: EditorState):
         curses.curs_set(self.term_vis)

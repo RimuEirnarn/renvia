@@ -1,7 +1,9 @@
+"""Internal"""
 import curses
 from lymia.colors import Coloring, ColorPair, color
 
 class Basic(Coloring):
+    """Color theme"""
     CURRENT_LINE = ColorPair(color.BLACK, color.YELLOW)
     FNBUFFER_NORMAL = ColorPair(color.BLACK, color.GREEN)
     FNBUFFER_EDIT = ColorPair(color.BLACK, color.YELLOW)
@@ -10,7 +12,7 @@ class Basic(Coloring):
 
 STATE = {
     'use_naive_mice': True,
-    "use_mice": False
+    "use_mice": False,
 }
 
 def use_mice():

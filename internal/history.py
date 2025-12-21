@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from lymia import ReturnType
+from lymia import ReturnInfo, ReturnType
 from internal.actions import Action
 
 if TYPE_CHECKING:
@@ -39,6 +39,9 @@ class HistoryTree:
             return ReturnType.CONTINUE
         if self.current.action:
             ret = self.current.action.undo(editor)
+            if isinstance(ret, ReturnInfo):
+                if ret.type == ReturnType.ERR:
+                    editor.debug.status.set(f"{ret.reason}: {ret.additional_info!r}")
             self.current = self.current.parent # type: ignore
             return ret
         return ReturnType.CONTINUE
@@ -50,7 +53,10 @@ class HistoryTree:
             return ReturnType.CONTINUE
         node = self.current.children[-1]
         if node.action:
-            rt = node.action.execute(editor)
+            ret = node.action.execute(editor)
+            if isinstance(ret, ReturnInfo):
+                if ret.type == ReturnType.ERR:
+                    editor.debug.status.set(f"{ret.reason}: {ret.additional_info!r}")
             self.current = node
-            return rt
+            return ret
         return ReturnType.CONTINUE
