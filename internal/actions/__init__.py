@@ -1,8 +1,8 @@
 """Actions"""
 # pylint: disable=unused-argument
 
-from lymia import ReturnInfo, ReturnType
 from typing import TYPE_CHECKING, Any
+from lymia import ReturnInfo, ReturnType
 
 if TYPE_CHECKING:
     from internal.editor import EditorState

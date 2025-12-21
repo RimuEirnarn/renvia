@@ -290,8 +290,10 @@ class Modes:
         """Record backspace
         What it does: Is creating a separate History Node based on an action
 
-        First, when a NAVIGATION key is detected, it calls pre_callback to alert parent Mode to push History of their current snapshot
-        Then, this function will record cursor position and capture how many BACKSPACE received and capturing current line snapshot.
+        First, when a NAVIGATION key is detected, it calls pre_callback to alert
+            parent Mode to push History of their current snapshot
+        Then, this function will record cursor position and capture how many
+            BACKSPACE received and capturing current line snapshot.
 
         Finally, when receiving a NAVIGATION key, the function push a Delete action."""
         if self._record_delete is False:

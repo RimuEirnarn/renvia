@@ -232,9 +232,6 @@ class Root(Scene):
         ren.addnstr(
             height - 2, 0, f"{filestatus:{width}}", width, self._mode.theme.pair()
         )
-        # status.set(
-        #     f"Row: {self._cursor.row} | Col: {self._cursor.col} | Buffer: {self._buffer.size} | Cursor: {self._mode.curs_style}/{self._mode.term_vis} | Key: {self._lastkey} | Details: {self._debug}"
-        # )
         self.update_panels()
         self.show_status()
         self.draw_editor()

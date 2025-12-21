@@ -8,20 +8,26 @@ from internal.actions import Action
 if TYPE_CHECKING:
     from internal.editor import EditorState
 
+
 class HistoryNode:
     """History Node"""
-    def __init__(self, act: Action | None, parent: "HistoryNode | None" = None, seq: int = 0) -> None:
+
+    def __init__(
+        self, act: Action | None, parent: "HistoryNode | None" = None, seq: int = 0
+    ) -> None:
         self.action = act
-        self.parent: 'HistoryNode | None' = parent
-        self.children: 'list[HistoryNode]' = []
+        self.parent: "HistoryNode | None" = parent
+        self.children: "list[HistoryNode]" = []
         self.seq = seq
 
     def command(self):
         """Action command"""
         return NotImplemented
 
+
 class HistoryTree:
     """History Tree"""
+
     def __init__(self) -> None:
         self.root: HistoryNode = HistoryNode(None)
         self.current: HistoryNode = self.root
@@ -42,7 +48,7 @@ class HistoryTree:
             if isinstance(ret, ReturnInfo):
                 if ret.type == ReturnType.ERR:
                     editor.debug.status.set(f"{ret.reason}: {ret.additional_info!r}")
-            self.current = self.current.parent # type: ignore
+            self.current = self.current.parent  # type: ignore
             return ret
         return ReturnType.CONTINUE
 
