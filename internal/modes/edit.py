@@ -14,6 +14,7 @@ from internal.actions.delete import DeleteAction
 from . import Modes, CURSOR_KEYMAP, TRIGGER_EVENT, key_modifier, remove_current_char
 
 mapped = tuple(map(ord, printable))
+BACKSPACE = (curses.KEY_BACKSPACE, const.KEY_BACKSPACE)
 
 # COMPLETED: Make sure that in Edit Mode, BACKSPACE is properly recorded
 # Known bugs:
@@ -36,6 +37,7 @@ class EditMode(Modes):
             ReturnType.OVERRIDE, "context switch", internal.modes.normal.NormalMode()
         ),
         curses.KEY_BACKSPACE: remove_current_char,
+        const.KEY_BACKSPACE: remove_current_char
     }
 
     def __init__(self) -> None:
@@ -102,12 +104,12 @@ class EditMode(Modes):
             self._mode = ""
             return super().handle_key(key, editor)
 
-        if key == curses.KEY_BACKSPACE and self._mode == '':
+        if key in BACKSPACE and self._mode == '':
             self._mode = 'delete'
         if key in mapped and self._mode == '':
             self._mode = 'edit'
 
-        if key == curses.KEY_BACKSPACE and self._mode == 'edit':
+        if key in BACKSPACE and self._mode == 'edit':
             self._push(editor, EditAction)
             char = current_line(editor)
             if len(char) == 0:
@@ -124,7 +126,7 @@ class EditMode(Modes):
             self._mode = 'edit'
             return self.on_key(chr(key), editor)
 
-        if self._mode == 'delete' and key == curses.KEY_BACKSPACE:
+        if self._mode == 'delete' and key in BACKSPACE:
             char = current_line(editor)
             if len(char) == 0:
                 char = '\n'
