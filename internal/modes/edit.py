@@ -93,7 +93,8 @@ class EditMode(Modes):
         return super().on_exit(editor)
 
     def handle_key(self, key: int, editor: EditorState) -> ReturnType | ReturnInfo:
-        editor.debug.status.set(f"{key} | {self._mode} | {''.join(self._buffer)!r}")
+        row, col = self._meta['row'], self._meta['col']
+        editor.debug.status.set(f"{key} | {self._mode} | {''.join(self._buffer)!r} | ({row}, {col})")
         if key in TRIGGER_EVENT:
             self._push(editor, DeleteAction if self._mode == 'delete' else EditAction)
             self._meta = {

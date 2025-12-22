@@ -16,7 +16,7 @@ class DeleteAction(Action):
         row = self._row
         col = self._col
         text = self._text
-        delcount = self._delcount
+        # delcount = self._delcountdd
 
         if "\n" in text:
             bufferlines = text.splitlines()
@@ -33,10 +33,11 @@ class DeleteAction(Action):
                 editor.buffer.delete(row - index)
             return ReturnType.OK
 
-        new = self._text[:col - delcount]
-        if text == editor.buffer[row]:
-            return ReturnInfo(ReturnType.ERR, "text == current buffer", (text, editor.buffer[row]))
-        editor.buffer[row] = new
+        old = editor.buffer[row]
+        new = old[:(col + 1)]
+        if text[::-1] == old:
+            return ReturnInfo(ReturnType.ERR, "text == current buffer", (text, old))
+        editor.buffer[row] = old.replace(new, "")
         return ReturnType.OK
 
     def undo(self, editor: EditorState) -> ReturnType | ReturnInfo:
@@ -55,15 +56,23 @@ class DeleteAction(Action):
                 editor.buffer.insert(n0row, line[::-1])
             return ReturnType.CONTINUE
 
+        # ???
+        old = editor.buffer[row]
         if delcount != 1:
-            delta = self._text[col - delcount:col]
+            delta = self._text[(col + 1) - delcount:(col + 1)]
         else:
             delta = self._text
-        old = editor.buffer[row]
+            left = old[:col]
+            right = old[col:]
+            editor.buffer[row] = left + delta + right
+            return ReturnType.OK
         if text[::-1] == old:
             return ReturnInfo(ReturnType.ERR, "text (reversed) == old", (text[::-1], old))
         # editor.buffer[row] = old + delta[::-1]
-        left = old[:col]
-        right = old[col:]
-        editor.buffer[row] = left + delta[::-1] + right
+        # Kalau buffer:
+        # Hello, World!
+        #      ^ (0, 5)
+        # <-- ',olleH'
+        new = delta[::-1] + old
+        editor.buffer[row] = new
         return ReturnType.OK
