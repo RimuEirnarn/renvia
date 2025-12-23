@@ -5,7 +5,7 @@
 import curses
 from typing import Any, Callable
 
-from internal import STATE, Basic
+from internal import STATE
 from internal.actions.delete import DeleteAction
 from internal.editor import EditorState
 from lymia import ReturnInfo, const

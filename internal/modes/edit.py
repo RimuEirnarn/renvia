@@ -90,7 +90,7 @@ class EditMode(Modes):
             editor.cursor.col -= 1
         if self._buffer and self._mode:
             self._push(editor, EditAction if self._mode == 'edit' else DeleteAction)
-        return super().on_exit(editor)
+        return ReturnType.REVERT_OVERRIDE
 
     def handle_key(self, key: int, editor: EditorState) -> ReturnType | ReturnInfo:
         row, col = self._meta['row'], self._meta['col']

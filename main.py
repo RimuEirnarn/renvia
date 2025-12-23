@@ -11,14 +11,16 @@ from internal.cursor import Cursor
 from internal.modes import Modes
 from internal.utils import set_cursor
 from internal import STATE, Basic, use_mice
+from internal.command import command
 
-from internal.editor import DebugState, EditorState, EditorView
+from internal.editor import DebugState, EditorState, EditorView, Selection
 from internal.modes.normal import NormalMode
 from internal.modes.helpmode import HelpMode
 from lymia import Panel, ReturnInfo, Scene, run, ReturnType
 from lymia.data import SceneResult, _StatusInfo as StatusInfo
 from lymia.environment import Theme
 from lymia.utils import prepare_windowed
+from collections import OrderedDict
 
 
 theme = Theme(2, Basic())
@@ -86,17 +88,9 @@ class Root(Scene):
         self._cursor = Cursor(0, 0, 0)
         self._status = StatusInfo()
         self._status.set("")
-        self._debug: DebugState = DebugState(StatusInfo(),
-                                             0,
-                                             0,
-                                             0,
-                                             0,
-                                             0,
-                                             0,
-                                             0,
-                                             0,
-                                             False,
-                                             None)  # type: ignore
+        self._debug: DebugState = DebugState(
+            StatusInfo(), 0, 0, 0, 0, 0, 0, 0, 0, False, None # type: ignore
+        )  # type: ignore
         self._mode = NormalMode()
         self._editor = EditorState(
             self._cursor,
@@ -106,6 +100,7 @@ class Root(Scene):
             EditorView(0, 0, 0, 0),
             self._debug,
             [self._mode],
+            Selection(0, 0, 0, 0),
         )
         self._reserved_lines = 2
         self._ctype = 2
@@ -114,6 +109,29 @@ class Root(Scene):
         self._moverow = 0
         self._movecol = 0
         self._panels: dict[str, Panel | None] = {}
+        # Render cache: maps (line, maxsize, shift) -> rendered string
+        self._render_cache: "OrderedDict[tuple, str]" = OrderedDict()
+        self._render_cache_limit = 2048
+
+    def _render_cached(self, line: str, maxsize: int, shift: int) -> str:
+        """Return cached rendered line or compute and cache it.
+
+        Cache key uses the line content, maxsize and shift so changes
+        to a line automatically miss the cache when the string differs.
+        """
+        key = (line, maxsize, shift)
+        cache = self._render_cache
+        try:
+            val = cache.pop(key)
+            # Move to end (most-recently used)
+            cache[key] = val
+            return val
+        except KeyError:
+            rendered = render_line(line, maxsize, shift)
+            cache[key] = rendered
+            if len(cache) > self._render_cache_limit:
+                cache.popitem(last=False)
+            return rendered
 
     def _draw_help(self, ren: window, _):
         ren.erase()
@@ -169,8 +187,9 @@ class Root(Scene):
         """Draw the editor"""
         ren = self._screen
         width, height = self.term_size
-        self._editor.window.term_width = width
-        self._editor.window.term_height = height
+        editor = self._editor
+        editor.window.term_width = width
+        editor.window.term_height = height
         res = self._reserved_lines
         bmaxh = self._buffer.size
         crow = self._cursor.row
@@ -185,19 +204,16 @@ class Root(Scene):
             if maxh > bmaxh:
                 minh = max(minh - (maxh - bmaxh), 0)
                 maxh = bmaxh
-            self._editor.window.start = minh
-            self._editor.window.end = maxh
+            editor.window.start = minh
+            editor.window.end = maxh
             crow = self._cursor.row - minh
             for index, relindex in enumerate(range(minh, maxh)):
-                style = 0
                 if index < (height - self._reserved_lines):
                     try:
-                        ren.addnstr(
-                            index,
-                            0,
-                            render_line(self._buffer[relindex], width - 1, shift),
-                            width,
-                            style,
+                        buffer_line = self._buffer[relindex]
+                        # Delegate selection-aware line rendering to helper
+                        self._draw_line_with_selection(
+                            ren, index, relindex, buffer_line, editor, shift, width
                         )
                     except IndexError:
                         self._debug.status.set(f"[{relindex} -> {bmaxh}]")
@@ -209,6 +225,164 @@ class Root(Scene):
                 ren.addstr(max(i, 1), 0, "~", Basic.UNCOVERED.pair())
         self._moverow = min(crow, height - res - 1)
         self._movecol = max(min(self._cursor.col, width - 1), 0)
+
+    def _draw_line_with_selection(
+        self, ren, index: int, relindex: int, buffer_line: str, editor, shift: int, width: int
+    ):
+        """Draw a single line with selection highlighting when active.
+
+        Parameters mirror the local variables from draw_editor.
+        """
+        # If there's no active selection, render normally
+        if not editor.selection:
+            try:
+                rendered = self._render_cached(buffer_line, width - 1, shift)
+                ren.addnstr(index, 0, rendered, width, 0)
+            except curses.error:
+                pass
+            return
+
+        # Selection is active: compute selection bounds
+        s = editor.selection
+        # Clamp rows/cols similar to Selection.slice
+        buf_len = len(self._buffer)
+        sr = max(0, min(s.start_row, buf_len - 1))
+        er = max(0, min(s.end_row, buf_len - 1))
+        sc = max(0, s.start_col)
+        ec = max(0, s.end_col)
+
+        # Same-line selection
+        if sr == er:
+            # Only highlight when this line is the selected line
+            line_len = self._buffer.sizeof_line(sr)
+            left = min(sc, ec, line_len)
+            right = min(max(sc, ec), line_len)
+            if relindex != sr:
+                try:
+                    ren.addnstr(
+                        index,
+                        0,
+                        render_line(buffer_line, width - 1, shift),
+                        width,
+                        0,
+                    )
+                except curses.error:
+                    pass
+                return
+
+            # Render visible window and then split into prefix/selected/suffix
+            full = self._render_cached(buffer_line, width - 1, shift)
+            vis_left = max(left, shift) - shift
+            vis_right = min(right, shift + (width - 1)) - shift
+            vis_left = max(0, min(vis_left, width - 1))
+            vis_right = max(0, min(vis_right, width - 1))
+            if vis_left >= vis_right:
+                try:
+                    ren.addnstr(index, 0, full, width, 0)
+                except curses.error:
+                    pass
+                return
+
+            try:
+                if vis_left > 0:
+                    ren.addnstr(
+                        index,
+                        0,
+                        full[:vis_left],
+                        vis_left,
+                        0,
+                    )
+                ren.addnstr(
+                    index,
+                    vis_left,
+                    full[vis_left:vis_right],
+                    vis_right - vis_left,
+                    Basic.FNBUFFER_SELECTION.pair(),
+                )
+                if vis_right < (width - 1):
+                    ren.addnstr(
+                        index,
+                        vis_right,
+                        full[vis_right:],
+                        width - vis_right,
+                        0,
+                    )
+            except curses.error:
+                pass
+            return
+
+        # Multi-line selection: determine top/bottom columns
+        top_row = min(sr, er)
+        bot_row = max(sr, er)
+
+        if top_row == s.start_row:
+            top_col = sc
+            bot_col = ec
+        else:
+            top_col = ec
+            bot_col = sc
+
+        top_col = min(top_col, self._buffer.sizeof_line(top_row))
+        bot_col = min(bot_col, self._buffer.sizeof_line(bot_row))
+
+        # If this row is outside selected range, draw normally
+        if relindex < top_row or relindex > bot_row:
+            try:
+                rendered = self._render_cached(buffer_line, width - 1, shift)
+                ren.addnstr(index, 0, rendered, width, 0)
+            except curses.error:
+                pass
+            return
+
+        # Determine left/right selection bounds for this particular row
+        if relindex == top_row:
+            left = top_col
+            right = self._buffer.sizeof_line(relindex)
+        elif relindex == bot_row:
+            left = 0
+            right = bot_col
+        else:
+            left = 0
+            right = self._buffer.sizeof_line(relindex)
+
+        full = self._render_cached(buffer_line, width - 1, shift)
+        vis_left = max(left, shift) - shift
+        vis_right = min(right, shift + (width - 1)) - shift
+        vis_left = max(0, min(vis_left, width - 1))
+        vis_right = max(0, min(vis_right, width - 1))
+        if vis_left >= vis_right:
+            try:
+                ren.addnstr(index, 0, full, width, 0)
+            except curses.error:
+                pass
+            return
+
+        try:
+            if vis_left > 0:
+                ren.addnstr(
+                    index,
+                    0,
+                    full[:vis_left],
+                    vis_left,
+                    0,
+                )
+            ren.addnstr(
+                index,
+                vis_left,
+                full[vis_left:vis_right],
+                vis_right - vis_left,
+                Basic.FNBUFFER_SELECTION.pair(),
+            )
+            if vis_right < (width - 1):
+                ren.addnstr(
+                    index,
+                    vis_right,
+                    full[vis_right:],
+                    width - vis_right,
+                    0,
+                )
+        except curses.error:
+            pass
 
     def deferred_op(self):
         width, height = self.term_size
@@ -248,12 +422,18 @@ class Root(Scene):
         curses.set_escdelay(1)
         if self.use_mouse:
             use_mice()
+        command.use_screen(self._screen)
+        command.use_editor(self._editor)
         self._mode.on_enter(self._editor)
         width = 64
         self._panels["debug"] = Panel(
-            DEBUG_TEMPLATE.count("\n") + 2, width, 0, self.width - width - 1, self._draw_debug
+            DEBUG_TEMPLATE.count("\n") + 2,
+            width,
+            0,
+            self.width - width - 1,
+            self._draw_debug,
         )
-        self._debug.panel = self._panels['debug']
+        self._debug.panel = self._panels["debug"]
         if self._debug.show:
             self._panels["debug"].show()
 

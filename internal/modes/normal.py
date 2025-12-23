@@ -1,12 +1,15 @@
 """Normal Mode"""
 import curses
-from lymia import ReturnInfo, ReturnType
+from lymia import ReturnInfo, ReturnType, status
+from lymia.data import _StatusInfo
 from lymia import const
+import internal.modes.edit
+import internal.modes.helpmode
+import internal.modes.visual
 from internal.editor import EditorState
 from internal import STATE, Basic, use_mice, disable_mice as mice_disable
 from internal.utils import set_cursor
-import internal.modes.edit
-import internal.modes.helpmode
+from internal.command import command
 from . import Modes, CURSOR_KEYMAP, TRIGGER_EVENT, rmc
 
 def to_insert(_):
@@ -16,6 +19,10 @@ def to_insert(_):
 def to_help(_):
     """To help mode"""
     return ReturnInfo(ReturnType.OVERRIDE, "context switching", internal.modes.helpmode.HelpMode())
+
+def to_visual(_):
+    """To visual mode"""
+    return ReturnInfo(ReturnType.OVERRIDE, "context switching", internal.modes.visual.VisualMode())
 
 def go_right(editor: EditorState):
     """Go next char"""
@@ -87,6 +94,7 @@ def tdebug(editor: EditorState):
         editor.debug.panel.show()
     return ReturnType.OK
 
+
 class NormalMode(Modes):
     """Modes"""
     curs_style = 1
@@ -97,6 +105,7 @@ class NormalMode(Modes):
         const.KEY_ESC: lambda _: ReturnType.CONTINUE,
         'i': to_insert,
         'a': to_insert,
+        'v': to_visual,
         'q': lambda _: ReturnType.EXIT,
         'x': rmc,
         '0': lambda editor: cjump_to(editor, 0),
@@ -109,21 +118,58 @@ class NormalMode(Modes):
         'G': lambda editor: rjump_to(editor, -1),
         'l': mouse_toggle,
         ';': toggle_mice_naivety,
-        '`': tdebug
+        '`': tdebug,
+
     }
 
     def __init__(self) -> None:
         super().__init__()
         self._buffer = []
         self._during_undo: bool = False
+        self._dbg: _StatusInfo | None = None
+        self._cmdoverride = False
+
+    def switch_to_command(self, editor: EditorState):
+        """Command"""
+        if self._cmdoverride:
+            return ReturnType.ERR
+        command.buffer.enter_edit()
+        self._cmdoverride = True
+        status.set(":")
+        command.buffer.set_field_pos(editor.window.term_height - 1)
+        return ReturnType.OVERRIDE
+
+    def handle_cmd(self, key: int):
+        """Handle command"""
+        if not self._cmdoverride:
+            return ReturnType.CONTINUE
+        ret = command.buffer.handle_edit(key)
+        status.set(f":{command.buffer.displayed_value}")
+        if ret == ReturnType.REVERT_OVERRIDE:
+            if self._dbg:
+                self._dbg.set(command.buffer.displayed_value)
+            command.buffer.exit_edit()
+            status.set("")
+            rt = command.call()
+            command.buffer.value = ""
+            self._cmdoverride = False
+            return rt
+        return ret
+
 
     def handle_key(self, key: int, editor: EditorState) -> ReturnType | ReturnInfo:
+        if key == ord(':') and self._cmdoverride is False:
+            self.switch_to_command(editor)
+            return ReturnType.OK
+        if self._cmdoverride:
+            return self.handle_cmd(key)
         if key in TRIGGER_EVENT and self._during_undo:
             self._during_undo = False
 
         return super().handle_key(key, editor)
 
-    def on_enter(self, _: EditorState):
+    def on_enter(self, editor: EditorState):
         curses.curs_set(self.term_vis)
+        self._dbg = editor.debug.status
         set_cursor(self.curs_style)
         return ReturnType.OVERRIDE

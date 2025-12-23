@@ -8,6 +8,7 @@ class Basic(Coloring):
     FNBUFFER_NORMAL = ColorPair(color.BLACK, color.GREEN)
     FNBUFFER_EDIT = ColorPair(color.BLACK, color.YELLOW)
     FNBUFFER_SELECT = ColorPair(color.BLACK, color.BLUE)
+    FNBUFFER_SELECTION = ColorPair(color.WHITE, color.BLACK)
     UNCOVERED = ColorPair(color.BLUE, -1)
 
 STATE = {
